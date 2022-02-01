@@ -165,7 +165,7 @@ job = DefaultJob(
 job.launch()
 ```
 
-If using the filters option here is the input format
+If using the filters option here is the input format. For more information on filters visit [link](https://docs.aws.amazon.com/glue/latest/webapi/API_PropertyPredicate.html)
 ```
 [
   {
@@ -177,6 +177,20 @@ If using the filters option here is the input format
 ]
 ```
 
+Example filtering on database and table. Note that Comparator can only apply to time fields.
+
+```
+[
+  {
+    "Key": "DatabaseName",
+    "Value": "my_database"
+  },
+  {
+    "Key": "Name",
+    "Value": "my_table"
+  }
+]
+```
 #### [Delta-Lake-MetadataExtractor](https://github.com/amundsen-io/amundsen/blob/main/databuilder/databuilder/extractor/delta_lake_metadata_extractor.py)
 An extractor that runs on a spark cluster and obtains delta-lake metadata using spark sql commands.
 This custom solution is currently necessary because the hive metastore does not contain all metadata information for delta-lake tables.
@@ -1504,6 +1518,56 @@ dict_config = {
 job_config = ConfigFactory.from_dict(dict_config)
 
 task = DefaultTask(extractor=ElasticsearchColumnStatsExtractor(), loader=FsNeo4jCSVLoader())
+
+job = DefaultJob(conf=job_config,
+                 task=task)
+```
+
+### [ElasticsearchWatermarkExtractor](./databuilder/extractor/es_watermark_extractor.py)
+
+The included `ElasticsearchWatermarkExtractor` provides support for extracting watermarks for Elasticsearch indexes.
+
+#### Technical indexes
+
+This extractor will collect metadata for all indexes of your Elasticsearch instance except for technical indices (which names start with `.`)
+
+#### Configuration
+
+Following configuration options are supported under `extractor.es_watermark` scope:
+- `cluster` (required) - name of the cluster of Elasticsearch instance we are extracting metadata from.
+- `schema` (required) - name of the schema of Elasticsearch instance we are extracting metadata from.
+- `client` (required) - object containing `Elasticsearch` class instance for connecting to Elasticsearch.
+- `time_field` (defaults to `@timestamp`) - name of the field representing time.
+
+#### Sample job config
+
+```python3
+from elasticsearch import Elasticsearch
+from pyhocon import ConfigFactory
+
+from databuilder.extractor.es_watermark_extractor import ElasticsearchWatermarkExtractor
+from databuilder.job.job import DefaultJob
+from databuilder.loader.file_system_neo4j_csv_loader import FsNeo4jCSVLoader
+from databuilder.task.task import DefaultTask
+
+tmp_folder = '/tmp/es_watermark'
+
+node_files_folder = f'{tmp_folder}/nodes'
+relationship_files_folder = f'{tmp_folder}/relationships'
+
+dict_config = {
+    f'loader.filesystem_csv_neo4j.{FsNeo4jCSVLoader.NODE_DIR_PATH}': node_files_folder,
+    f'loader.filesystem_csv_neo4j.{FsNeo4jCSVLoader.RELATION_DIR_PATH}': relationship_files_folder,
+    f'loader.filesystem_csv_neo4j.{FsNeo4jCSVLoader.SHOULD_DELETE_CREATED_DIR}': True,
+    f'extractor.es_watermark.{ElasticsearchWatermarkExtractor.CLUSTER}': 'demo',
+    f'extractor.es_watermark.{ElasticsearchWatermarkExtractor.SCHEMA}': 'dev',
+    f'extractor.es_watermark.{ElasticsearchWatermarkExtractor.ELASTICSEARCH_TIME_FIELD}': 'time',
+    f'extractor.es_watermark.{ElasticsearchWatermarkExtractor.ELASTICSEARCH_CLIENT_CONFIG_KEY}': Elasticsearch()
+}
+
+job_config = ConfigFactory.from_dict(dict_config)
+
+task = DefaultTask(extractor=ElasticsearchWatermarkExtractor(), loader=FsNeo4jCSVLoader())
 
 job = DefaultJob(conf=job_config,
                  task=task)
